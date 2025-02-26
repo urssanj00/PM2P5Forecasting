@@ -315,7 +315,6 @@ class ProcessPM2P5Prediction:
                     sensor_locations.iloc[j]['longitude']
                 )
 
-
                 logger.info(f"distance {distance} ")
                 logger.info(f"distance {type(distance)} threshold_km {type(threshold_km)} ")
                 if distance <= threshold_km:
@@ -368,7 +367,7 @@ class ProcessPM2P5Prediction:
         criterion = nn.MSELoss()
         optimizer = optim.Adam(model.parameters(), lr=0.001)
 
-        num_epochs = 300
+        num_epochs = int(self.properties['num_epochs'])
         train_losses, train_rmse_values, train_r2_values, train_mape_values = [], [], [], []
         test_losses, test_rmse_values, test_r2_values, test_mape_values = [], [], [], []
 
@@ -379,7 +378,7 @@ class ProcessPM2P5Prediction:
 
         for epoch in range(num_epochs):
             start_time = time.time()  # Record start time
-
+           # logger.info(f"Epoch Start {start_time}")
             model.train()
             optimizer.zero_grad()
             predictions_train = model(self.X_train_tensor, edge_index, self.X_train_tensor)
@@ -425,9 +424,14 @@ class ProcessPM2P5Prediction:
             test_mape_values.append(test_mape)
             end_time = time.time()  # Record end time
             epoch_time = end_time - start_time  # Calculate epoch time
+            end_time = time.time()
+            logger.info(f"Epoch {epoch+1}/{num_epochs}, Time: {epoch_time:.2f} seconds, Train Loss: {train_loss.item()}, Test Loss: {test_loss.item()}, Train RMSE: {train_rmse}, Train R-Square: {train_r2}, Train MAPE: {train_mape}, Test RMSE: {test_rmse}, Test R-Square: {test_r2}, Test MAPE: {test_mape}")
+          #  logger.info(f"Epoch End {end_time}")
+            self.plot_train_and_test(train_losses, test_losses, train_rmse_values, test_rmse_values, train_r2_values,
+                                     test_r2_values, train_mape_values, test_mape_values)
 
-            logger.info(f"Epoch {epoch+1}/{num_epochs}, Time: {epoch_time:.2f} seconds, Train Loss: {train_loss.item()}, Test Loss: {test_loss.item()}, Train RMSE: {train_rmse}, Train R²: {train_r2}, Train MAPE: {train_mape}, Test RMSE: {test_rmse}, Test R²: {test_r2}, Test MAPE: {test_mape}")
-
+    def plot_train_and_test(self, train_losses, test_losses, train_rmse_values, test_rmse_values, train_r2_values,
+                            test_r2_values, train_mape_values, test_mape_values):
         # Plotting train and test losses over epochs
         plt.figure(figsize=(12, 6))
 
@@ -471,19 +475,11 @@ class ProcessPM2P5Prediction:
         #plt.show()
         plt.close()
 
-    def prepare_future_data(self, future_dates, sensor_ids, scalers_X, sensor_location_map):
-        # Load the trained model
-        num_features = self.X_train_tensor.shape[2]
-        num_nodes = self.X_train_tensor.shape[1]
-        logger.info(f'best_model_path {self.best_model_path}')
+    def prepare_future_data(self, future_dates, sensor_location_map):
 
-        model = AdvancedTemporalGraphNetwork(num_features=num_features,
-                                             hidden_channels=16,
-                                             num_nodes=num_nodes,
-                                             dropout=0.2)
+        self.X_train_tensor, self.X_test_tensor, self.y_train_tensor, self.y_test_tensor = (
+            self.create_scaled_tensor())
 
-        model.load_state_dict(torch.load(self.best_model_path, weights_only=True))  # Load the best model
-        model.eval()  # Set the model to evaluation mode
         """
         Prepare future data for forecasting with actual temperature & humidity.
         Args:
@@ -496,13 +492,22 @@ class ProcessPM2P5Prediction:
             X_future_tensor: Tensor of future data for prediction.
         """
         # Create DataFrame for future timestamps and sensor IDs
+        logger.info(f"timestamp==> ")
+        logger.info(f"{np.repeat(future_dates, len(self.sensor_ids))}")
+
+        logger.info(f"sensor_id==> ")
+        logger.info(f"{np.tile(self.sensor_ids, len(future_dates))}")
+
         future_df = pd.DataFrame({
-            'timestamp': np.repeat(future_dates, len(sensor_ids)),
-            'sensor_id': np.tile(sensor_ids, len(future_dates))
+            'timestamp': np.repeat(future_dates, len(self.sensor_ids)),
+            'sensor_id': np.tile(self.sensor_ids, len(future_dates))
         })
+        logger.info(f"0 future_df info")
+        logger.info(f"0 {future_df.info}")
+        logger.info(f"0 future_df info ends==>")
 
         # Get latest temperature & humidity readings per sensor
-        latest_readings = df.groupby('sensor_id')[['temperature', 'humidity']].last()
+        latest_readings = self.df.groupby('sensor_id')[['temperature', 'humidity']].last()
 
         # Map temperature & humidity from historical data
         future_df['temperature'] = future_df['sensor_id'].map(lambda x: latest_readings.loc[x, 'temperature'] if x in latest_readings.index else np.nan)
@@ -526,16 +531,24 @@ class ProcessPM2P5Prediction:
 
         # Drop timestamp column
         future_df = future_df.drop(columns=['timestamp'])
-
+        logger.info(f"1 future_df info")
+        logger.info(f"1 {future_df.info}")
+        logger.info(f"1 future_df info ends==>")
         # Scale features using the same scalers used during training
         X_future_scaled = []
         for sensor_id in self.sensor_ids:
             df_sensor = future_df[future_df['sensor_id'] == sensor_id].drop(columns=['sensor_id'])
-            X_scaled = scalers_X[sensor_id].transform(df_sensor.to_numpy())
+            X_scaled = self.scalers_X[sensor_id].transform(df_sensor.to_numpy())
             X_future_scaled.append(X_scaled)
 
         # Combine scaled data
         X_future_scaled = np.concatenate(X_future_scaled, axis=0)
+        logger.info(f"1 X_future_scaled info")
+        logger.info(f"1 {X_future_scaled.shape}")
+        logger.info(f"1 {X_future_scaled}")
+        logger.info(f"1 X_future_scaled info ends==>")
+        num_features = self.X_train_tensor.shape[2]
+        num_nodes = self.X_train_tensor.shape[1]
 
         # Ensure divisibility by num_nodes (padding if necessary)
         total_samples = X_future_scaled.shape[0]
@@ -549,51 +562,101 @@ class ProcessPM2P5Prediction:
 
         # Convert to tensor
         X_future_tensor = torch.tensor(X_future_scaled, dtype=torch.float32)
-
+        logger.info(f"1 X_future_tensor info")
+        logger.info(f"1 {X_future_tensor.shape}")
+        logger.info(f"1 {X_future_tensor}")
+        logger.info(f"1 X_future_scaled info ends==>")
         return X_future_tensor
 
+    def future_dates_for_forcasting(self):
         # Define future dates for forecasting (every 15 minutes for the next 7 days)
         future_dates = pd.date_range(start=pd.Timestamp.now().floor('D') + pd.Timedelta(days=1),  # Start from next day
                                      end=pd.Timestamp.now().floor('D') + pd.Timedelta(days=8),    # End after 7 days
                                      freq='15min')  # Frequency: 15 minutes
 
         logger.info(f'len future_dates {len(future_dates)}')
-        logger.info(f'len sensor_ids {len(sensor_ids)}')
+        logger.info(f'{future_dates}')
 
 
         # Selecting relevant columns
-        sensor_location_map = df[['sensor_id', 'longitude', 'latitude']]
+        sensor_location_map = self.df[['sensor_id', 'longitude', 'latitude']]
         # Dropping duplicate sensor_id rows
         sensor_location_map = sensor_location_map.drop_duplicates(subset='sensor_id')
 
         # Setting index and converting to dictionary
         sensor_location_map = sensor_location_map.set_index('sensor_id')[['longitude', 'latitude']].to_dict(orient='index')
-        logger.info(sensor_location_map)
+        logger.info(f"sensor_location_map : {sensor_location_map}")
 
         # Prepare future data
-        X_future_tensor = prepare_future_data(future_dates, sensor_ids, scalers_X, sensor_location_map)
+        X_future_tensor = self.prepare_future_data(future_dates, sensor_location_map)
+        logger.info(f'X_future_tensor=>{X_future_tensor.shape}')
+        logger.info(f'{X_future_tensor}')
 
+        logger.info(f'len sensor_ids {len(self.sensor_ids)}')
+
+        logger.info(f'best_model_path {self.best_model_path}')
+        # Load the trained model
+        num_features = self.X_train_tensor.shape[2]
+        num_nodes = self.X_train_tensor.shape[1]
+        model = AdvancedTemporalGraphNetwork(num_features=num_features,
+                                             hidden_channels=16,
+                                             num_nodes=num_nodes,
+                                             dropout=0.2)
+        # Usage in the training code:
+        edge_index = self.create_distance_based_edge_index()
+
+        model.load_state_dict(torch.load(self.best_model_path, weights_only=True))  # Load the best model
+        model.eval()  # Set the model to evaluation mode
         # Generate predictions for future dates
         with torch.no_grad():
             future_predictions = model(X_future_tensor, edge_index, X_future_tensor)
 
-        # Unscale the predictions
+        #Unscale the predictions
         future_predictions_unscaled = np.concatenate([
-            self.scalers_y[sensor_id].inverse_transform(future_predictions[idx:idx+len(future_dates)].detach().numpy().reshape(-1, 1)).flatten()
-            for idx, sensor_id in enumerate(sensor_ids)
+            self.scalers_y[sensor_id].inverse_transform(
+                future_predictions[idx:idx+len(future_dates)].detach().numpy().reshape(-1, 1)).flatten()
+            for idx, sensor_id in enumerate(self.sensor_ids)
         ], axis=0)
+
+        # Validate final shape
+        logger.info(f"  future_predictions_unscaled {len(future_predictions_unscaled)}")
+        logger.info(f"  sensor_id {len(self.sensor_ids)}")
+        logger.info(f"  timestamp {len(future_dates)}")
+
+        expected_length = len(future_dates) * len(self.sensor_ids)
+        logger.info(f"Expected length of predictions: {expected_length}")
+        logger.info(f"Actual length of future_predictions_unscaled: {len(future_predictions_unscaled)}")
+
+        if len(future_predictions_unscaled) < expected_length:
+            logger.warning(
+                f"Prediction length mismatch! Expected {expected_length}, got {len(future_predictions_unscaled)}.")
+            future_predictions_unscaled = np.pad(future_predictions_unscaled,
+                                                 (0, expected_length - len(future_predictions_unscaled)),
+                                                 mode='constant')
 
         # Create a DataFrame to store the predictions
         future_predictions_df = pd.DataFrame({
-            'timestamp': np.repeat(future_dates, len(sensor_ids)),
-            'sensor_id': np.tile(sensor_ids, len(future_dates)),
+            'timestamp': np.repeat(future_dates, len(self.sensor_ids)),
+            'sensor_id': np.tile(self.sensor_ids, len(future_dates)),
             'predicted_pm2p5': future_predictions_unscaled
         })
 
-        logger.info(future_predictions_df)
+        logger.info(self.future_predictions_15min)
         # Save the predictions to a CSV file
-        future_predictions_df.to_csv(future_predictions_15min, index=False)
+        # Drop rows where predicted_pm2p5 is 0
+        future_predictions_df = future_predictions_df[future_predictions_df['predicted_pm2p5'] != 0]
+
+        from datetime import datetime
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        output_dir = os.path.dirname(self.future_predictions_15min)
+        logger.info(f"output_dir {output_dir}")
+        for sensor_id, df_subset in future_predictions_df.groupby('sensor_id'):
+            sensor_filename = f'future_predictions_sensor_{sensor_id}_{timestamp}.csv'
+            df_subset.to_csv(f"{self.future_predictions_15min}/{sensor_filename}", index=False)
+            logger.info(f"Saved predictions for sensor {sensor_id} to {sensor_filename}")
         logger.info("Future predictions saved to CSV.")
+
+        logger.info(f"Future predictions saved to CSV.{self.future_predictions_15min}")
 
 """save with actual data"""
 logger.info('Starting processing')
@@ -632,4 +695,5 @@ logger.info(f"Printed modified dataframe")
 logger.info(f"Creating Scaled Tensors")
 p.train_and_test()
 logger.info(f"Training completed and plots saved")
-
+p.future_dates_for_forcasting()
+logger.info(f"Future Date Forcast Done")

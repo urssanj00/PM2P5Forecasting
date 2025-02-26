@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Air Quality Station</title>
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; }
+        .container { display: flex; justify-content: center; margin-top: 20px; }
+        .form-container, .data-container { padding: 20px; border: 1px solid #ccc; width: 40%; margin: 10px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { border: 1px solid black; padding: 8px; text-align: center; }
+        th { background-color: #f4f4f4; }
+    </style>
+</head>
+<body>
+    <h2>Air Quality Monitoring</h2>
+    
+    <div class="container">
+        <div class="form-container">
+            <form method="GET">
+                <label for="station_id">Select Station:</label>
+                <select name="station_id">
+                    <option value="">-- Select --</option>
+                    {% for station in stations %}
+                        <option value="{{ station }}" {% if station == selected_station %}selected{% endif %}>{{ station }}</option>
+                    {% endfor %}
+                </select>
+                <button type="submit">Get Data</button>  <!-- Fetch data on button click -->
+            </form>
+        </div>
+        
+        <div class="data-container">
+            <h3>Air Quality Data</h3>
+            {% if selected_data %}
+                <table>
+                    <tr>
+                        <th>Timestamp</th>
+                        <th>Sensor ID</th>
+                        <th>PM2.5</th>
+                    </tr>
+                    {% for row in selected_data %}
+                        <tr>
+                            <td>{{ row[0] }}</td>
+                            <td>{{ row[1] }}</td>
+                            <td>{{ row[2] }}</td>
+                        </tr>
+                    {% endfor %}
+                </table>
+            {% else %}
+                <p>Select a station and click "Get Data" to view results.</p>
+            {% endif %}
+        </div>
+    </div>
+</body>
+</html>
