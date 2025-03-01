@@ -15,7 +15,6 @@
 </head>
 <body>
     <h2>Air Quality Monitoring</h2>
-    
     <div class="container">
         <div class="form-container">
             <form method="GET">
@@ -32,17 +31,17 @@
         
         <div class="data-container">
             <h3>Air Quality Data</h3>
+            <h3>PM2.5 Concentration Forecast for Sensor ID : {{selected_station}}</h3>
+
             {% if selected_data %}
                 <table>
                     <tr>
                         <th>Timestamp</th>
-                        <th>Sensor ID</th>
                         <th>PM2.5</th>
                     </tr>
                     {% for row in selected_data %}
                         <tr>
                             <td>{{ row[0] }}</td>
-                            <td>{{ row[1] }}</td>
                             <td>{{ row[2] }}</td>
                         </tr>
                     {% endfor %}

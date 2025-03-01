@@ -32,7 +32,7 @@ class ProcessPM2P5Prediction:
         logger.info(f'Drive Mounted - Best Model Path assigned {self.best_model_path}')
         logger.info(f'Drive Mounted - Plot Path assigned {self.plot_path}')
 
-        self.combined_df =None
+        self.combined_df = None
         self.dir_list = None # Dataset: list of files in input directory
         self.df = None
 
@@ -668,8 +668,10 @@ logger.info(list_of_dir)
 
 df = p.load_all_csv()
 logger.info(f'combined df {df}')
+logger.info(f'plot_histogram')
 
 p.plot_histogram()
+logger.info(f'plot_histogram done')
 
 outliers = p.find_outliers_iqr(df, 'pm2p5')
 logger.info(f'Outliers')
@@ -681,6 +683,7 @@ logger.info(f'Saved boxplot with original dataset {p.df.shape}')
 p.display_boxplot_outliers()
 
 p.trim_outliers()
+p.plot_boxplot_trimmed_df()
 
 p.plot_histogram_trimmed_df()
 logger.info(f'Saved histogram with trimmed dataset {p.df.shape}')
